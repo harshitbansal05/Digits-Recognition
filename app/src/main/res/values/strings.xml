@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">SVHM Tensorflow</string>
+    <string name="click">CLICK</string>
+    <string name="go">GO</string>
+</resources>
