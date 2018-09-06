@@ -9,63 +9,55 @@ import java.io.IOException;
 
 class TensorflowImageClassifier {
 
-    private int boxInputSize, digitInputSize;
+    private int digitInputSize;
 
-    private String boxInputName, digitInputName;
-    private String[] boxOutputNames, digitOutputNames;
-    private float[] boxOutputs;
+    private String digitInputName;
+    private String[] digitOutputNames;
     private int[] digitOutputs;
 
-    private TensorFlowInferenceInterface boxInferenceInterface, digitInferenceInterface;
+    private TensorFlowInferenceInterface mapInferenceInterface, digitInferenceInterface;
 
     static TensorflowImageClassifier create(
             AssetManager assetManager,
-            String boxModelFilename,
+            String mapModelFilename,
             String digitModelFilename,
-            int boxInputSize,
             int digitInputSize,
-            int boxNumClasses,
             int digitNumClasses,
-            String boxInputName,
             String digitInputName,
-            String boxOutputName,
             String digitOutputName)
             throws IOException {
         TensorflowImageClassifier c = new TensorflowImageClassifier();
-        c.boxInputName = boxInputName;
         c.digitInputName = digitInputName;
-        c.boxOutputNames = new String[]{boxOutputName};
         c.digitOutputNames = new String[]{digitOutputName};
 
-        c.boxInferenceInterface = new TensorFlowInferenceInterface(assetManager, boxModelFilename);
+        c.mapInferenceInterface = new TensorFlowInferenceInterface(assetManager, mapModelFilename);
         c.digitInferenceInterface = new TensorFlowInferenceInterface(assetManager, digitModelFilename);
 
-        c.boxInputSize = boxInputSize;
         c.digitInputSize = digitInputSize;
-
-        c.boxOutputs = new float[boxNumClasses];
         c.digitOutputs = new int[digitNumClasses];
         return c;
     }
 
-    float[] recognizeBox(final float[] pixels) {
-        TraceCompat.beginSection("recognizeImage");
+    void getMaps(final float[] pixels, float[] scoreMap, float[] geometryMap, int width, int height) {
+        TraceCompat.beginSection("getMaps");
 
         // Copy the input data into TensorFlow.
         TraceCompat.beginSection("feed");
-        boxInferenceInterface.feed(boxInputName, pixels, new long[]{boxInputSize * boxInputSize * 3});
+        mapInferenceInterface.feed("input_image", pixels, new long[]{width * height * 3});
+        mapInferenceInterface.feed("width", new int[]{width}, new long[]{1});
+        mapInferenceInterface.feed("height", new int[]{height}, new long[]{1});
         TraceCompat.endSection();
 
         // Run the inference call.
         TraceCompat.beginSection("run");
-        boxInferenceInterface.run(boxOutputNames, false);
+        mapInferenceInterface.run(new String[]{"F_score", "F_geometry"}, false);
         TraceCompat.endSection();
 
         // Copy the output Tensor back into the output array.
         TraceCompat.beginSection("fetch");
-        boxInferenceInterface.fetch(boxOutputNames[0], boxOutputs);
+        mapInferenceInterface.fetch("F_score", scoreMap);
+        mapInferenceInterface.fetch("F_geometry", geometryMap);
         TraceCompat.endSection();
-        return boxOutputs;
     }
 
     int[] recognizeImage(final float[] pixels) {

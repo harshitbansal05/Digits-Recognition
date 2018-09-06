@@ -6,40 +6,51 @@ import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.provider.MediaStore;
+import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
+
+import org.json.JSONObject;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+import retrofit2.Retrofit;
+import retrofit2.converter.gson.GsonConverterFactory;
 
 public class MainActivity extends AppCompatActivity {
 
     private static final int REQUEST_IMAGE_CAPTURE = 1;
 
-    private static final int BOX_INPUT_SIZE = 448;
-    private static final int BOX_NUM_CLASSES = 4;
     private static final int DIGIT_INPUT_SIZE = 64;
     private static final int DIGIT_NUM_CLASSES = 6;
 
-    private static final String BOX_INPUT_NAME = "image";
-    private static final String BOX_OUTPUT_NAME = "final_logits";
     private static final String DIGIT_INPUT_NAME = "image_placeholder";
     private static final String DIGIT_OUTPUT_NAME = "final_logits";
 
-    private static final String BOX_MODEL_FILE = "file:///android_asset/box_model_graph.pb";
-    private static final String DIGIT_MODEL_FILE = "file:///android_asset/svhm_model_graph.pb";
+    private static final String MAP_MODEL_FILE = "file:///android_asset/map_model_graph.pb";
+    private static final String DIGIT_MODEL_FILE = "file:///android_asset/map_model_graph.pb";
 
     private Executor executor = Executors.newSingleThreadExecutor();
     private TensorflowImageClassifier classifier;
 
     private TextView resultTextView;
     private ImageView mImageView;
-    private Bitmap resizedBitmap;
+    private Bitmap bitmap;
+
+    private int mapWidth, mapHeight;
+    private float ratioH, ratioW;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -57,8 +68,7 @@ public class MainActivity extends AppCompatActivity {
         if (requestCode == REQUEST_IMAGE_CAPTURE && resultCode == RESULT_OK) {
            final Uri uri = data.getData();
             try {
-                Bitmap bitmap = MediaStore.Images.Media.getBitmap(getContentResolver(), uri);
-                resizedBitmap = Bitmap.createScaledBitmap(bitmap, BOX_INPUT_SIZE, BOX_INPUT_SIZE, true);
+                bitmap = MediaStore.Images.Media.getBitmap(getContentResolver(), uri);
                 mImageView.setImageBitmap(bitmap);
             } catch (IOException e) {
                 e.printStackTrace();
@@ -82,36 +92,91 @@ public class MainActivity extends AppCompatActivity {
         startActivityForResult(Intent.createChooser(intent, "Select Picture"), REQUEST_IMAGE_CAPTURE);
     }
 
-    public void detectNumbers(View v) {
-        if (resizedBitmap == null) {
-            return;
-        }
-        Bitmap mutableBitmap = resizedBitmap.copy(Bitmap.Config.ARGB_8888, true);
-        mutableBitmap.setConfig(Bitmap.Config.ARGB_8888);
+    private void resizeBitmap() {
+        int width = bitmap.getWidth();
+        int height = bitmap.getHeight();
+        int resizedWidth = width % 32 == 0 ? width : (width / 32) * 32;
+        int resizedHeight = height % 32 == 0 ? height : (height / 32 - 1) * 32;
+        bitmap = Bitmap.createScaledBitmap(bitmap, resizedWidth, resizedHeight, false);
+        mapWidth = resizedWidth / 4;
+        mapHeight = resizedHeight / 4;
+        ratioW = (float) resizedWidth / (float) width;
+        ratioH = (float) resizedHeight / (float) height;
+    }
 
-        int boxWidth = BOX_INPUT_SIZE;
-        int boxHeight = BOX_INPUT_SIZE;
-        float[] boxRgbValues = new float[boxWidth  * boxHeight * 3];
-        int[] pixels = new int[boxHeight * boxWidth];
-        mutableBitmap.getPixels(pixels, 0, boxWidth, 0, 0, boxWidth, boxHeight);
-
+    private void getMaps(Bitmap bitmap, int width, int height, float[] scoreMap, float[] geometryMap) {
+        int[] pixels = new int[width * height];
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
         int count = -1;
-        for (int y = 0; y < boxHeight; y++) {
-            for (int x = 0; x < boxWidth; x++) {
-                int index = y * boxWidth + x;
+        float[] rgbValues = new float[width * height * 3];
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int index = y * width + x;
                 int p = pixels[index];
                 int R = (p & 0xff0000) >> 16;
                 int G = (p & 0xff00) >> 8;
                 int B = p & 0xff;
-                boxRgbValues[++count] = R;
-                boxRgbValues[++count] = G;
-                boxRgbValues[++count] = B;
+                rgbValues[++count] = R;
+                rgbValues[++count] = G;
+                rgbValues[++count] = B;
             }
         }
+        classifier.getMaps(rgbValues, scoreMap, geometryMap, width, height);
+    }
 
-        float[] output = classifier.recognizeBox(boxRgbValues);
-        Bitmap croppedBitmap =
-                Bitmap.createBitmap(mutableBitmap, (int) output[0], (int) output[1], (int) output[2], (int) output[3]);
+    private void getBoxes(float[] scoreMap, float[] geometryMap) {
+        Retrofit retrofit = new Retrofit.Builder()
+                .baseUrl("http://192.168.43.50:8000/")
+                .addConverterFactory(GsonConverterFactory.create())
+                .build();
+        BoxDetectionService service = retrofit.create(BoxDetectionService.class);
+        StringBuilder sm = new StringBuilder();
+        // List<Float> scoreMapList = new ArrayList<>();
+        for (int i = 0; i < scoreMap.length; i++) sm.append(Float.toString(scoreMap[i])).append(",");
+        StringBuilder gm = new StringBuilder();
+        // List<Float> geoMapList = new ArrayList<>();
+        for (int i = 0; i < geometryMap.length; i++) gm.append(Float.toString(geometryMap[i])).append(",");
+        Call<JSONObject> callback = service.getBoxes(sm.toString(), gm.toString(), mapWidth, mapHeight, ratioH, ratioW);
+        callback.enqueue(new Callback<JSONObject>() {
+            @Override
+            public void onResponse(@NonNull Call<JSONObject> call, @NonNull Response<JSONObject> response) {
+                ArrayList<Integer> boxes = new ArrayList<>();
+                if (response.body() != null) {
+                    // boxes.addAll(response.body().);
+                    if (boxes.size() == 0) {
+                        Toast.makeText(MainActivity.this, "No box detected", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    getDigits(boxes);
+                } else Toast.makeText(MainActivity.this, "No box detected", Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public void onFailure(@NonNull Call<JSONObject> call, @NonNull Throwable t) {
+                t.printStackTrace();
+                Toast.makeText(MainActivity.this, t.getMessage(), Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    public void detectNumbers(View v) {
+        if (bitmap == null) {
+            Toast.makeText(this, "Bitmap is null", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        resizeBitmap();
+        Bitmap mutableBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true);
+        mutableBitmap.setConfig(Bitmap.Config.ARGB_8888);
+
+        float[] scoreMap = new float[mapWidth * mapHeight];
+        float[] geoMetryMap = new float[mapWidth * mapHeight * 5];
+        getMaps(mutableBitmap, mutableBitmap.getWidth(), mutableBitmap.getHeight(), scoreMap, geoMetryMap);
+        getBoxes(scoreMap, geoMetryMap);
+    }
+
+    private void getDigits(List<Integer> boxes) {
+        Bitmap croppedBitmap = Bitmap.createBitmap(bitmap, boxes.get(0), boxes.get(1), boxes.get(6), boxes.get(7));
         croppedBitmap = Bitmap.createScaledBitmap(croppedBitmap, DIGIT_INPUT_SIZE, DIGIT_INPUT_SIZE, true);
         Bitmap smallMutableBitmap = croppedBitmap.copy(Bitmap.Config.ARGB_8888, true);
         smallMutableBitmap.setConfig(Bitmap.Config.ARGB_8888);
@@ -122,7 +187,7 @@ public class MainActivity extends AppCompatActivity {
         int[] pix = new int[width * height];
         smallMutableBitmap.getPixels(pix, 0, width, 0, 0, width, height);
 
-        count = -1;
+        int count = -1;
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
                 int index = y * width + x;
@@ -137,7 +202,6 @@ public class MainActivity extends AppCompatActivity {
         }
 
         int[] finalOutput = classifier.recognizeImage(rgbValues);
-
         resultTextView.setText("Length: " + Integer.toString(finalOutput[0]) + "\n");
         resultTextView.append(Integer.toString(finalOutput[1]) + " ");
         resultTextView.append(Integer.toString(finalOutput[2]) + " ");
@@ -153,15 +217,11 @@ public class MainActivity extends AppCompatActivity {
                 try {
                     classifier = TensorflowImageClassifier.create(
                             getAssets(),
-                            BOX_MODEL_FILE,
+                            MAP_MODEL_FILE,
                             DIGIT_MODEL_FILE,
-                            BOX_INPUT_SIZE,
                             DIGIT_INPUT_SIZE,
-                            BOX_NUM_CLASSES,
                             DIGIT_NUM_CLASSES,
-                            BOX_INPUT_NAME,
                             DIGIT_INPUT_NAME,
-                            BOX_OUTPUT_NAME,
                             DIGIT_OUTPUT_NAME);
                 } catch (IOException e) {
                     e.printStackTrace();
