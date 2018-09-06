@@ -157,7 +157,6 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(MainActivity.this, t.getMessage(), Toast.LENGTH_LONG).show();
             }
         });
-    }
 
     public void detectNumbers(View v) {
         if (bitmap == null) {
