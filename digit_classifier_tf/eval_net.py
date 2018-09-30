@@ -106,7 +106,7 @@ def main(_):
   dest_directory = os.path.join(dirname, 'svhn_data/eval')
   if tf.gfile.Exists(dest_directory):
     tf.gfile.DeleteRecursively(dest_directory)
-    tf.gfile.MakeDirs(dest_directory)
+  tf.gfile.MakeDirs(dest_directory)
   evaluate()
 
 

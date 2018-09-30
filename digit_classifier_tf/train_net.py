@@ -77,7 +77,7 @@ def main(_):
   dest_directory = os.path.join(dirname, 'svhn_data/train_')
   if tf.gfile.Exists(dest_directory):
     tf.gfile.DeleteRecursively(dest_directory)
-    tf.gfile.MakeDirs(dest_directory)
+  tf.gfile.MakeDirs(dest_directory)
   train_()
 
 

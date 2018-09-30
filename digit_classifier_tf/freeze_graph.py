@@ -3,6 +3,9 @@ import tensorflow as tf
 
 from model import *
 
+tf.app.flags.DEFINE_string('checkpoint_path', 'svhn_data/train_', '')
+FLAGS = tf.app.flags.FLAGS
+
 output_node_names = 'final_logits'
 IMAGE_SIZE = 64
 
@@ -40,7 +43,7 @@ def freeze():
 
     with tf.Session() as sess:
       dirname = os.path.dirname(__file__)
-      dest_directory = os.path.join(dirname, 'svhn_data/train_')
+      dest_directory = os.path.join(dirname, FLAGS.checkpoint_path)
       ckpt = tf.train.get_checkpoint_state(dest_directory)
       if ckpt and ckpt.model_checkpoint_path:
         # Restores from checkpoint
@@ -73,7 +76,7 @@ def main(_):
   dest_directory = os.path.join(dirname, 'svhn_data/model')
   if tf.gfile.Exists(dest_directory):
     tf.gfile.DeleteRecursively(dest_directory)
-    tf.gfile.MakeDirs(dest_directory)
+  tf.gfile.MakeDirs(dest_directory)
   freeze()
 
 
