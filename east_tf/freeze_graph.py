@@ -213,7 +213,7 @@ def freeze():
           g.as_graph_def(),
           output_node_names.split(",")
       ) 
-      output_graph = './map_model_graph_final.pb'
+      output_graph = './box_model_graph.pb'
       # Finally we serialize and dump the output graph to the filesystem
       with tf.gfile.GFile(output_graph, "wb") as f:
         f.write(output_graph_def.SerializeToString())

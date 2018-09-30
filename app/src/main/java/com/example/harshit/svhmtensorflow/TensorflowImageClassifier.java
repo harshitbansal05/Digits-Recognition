@@ -11,7 +11,9 @@ class TensorflowImageClassifier {
 
     private int digitInputSize;
 
+    private String[] boxInputNames;
     private String digitInputName;
+    private String[] boxOutputNames;
     private String[] digitOutputNames;
     private int[] digitOutputs;
 
@@ -23,11 +25,15 @@ class TensorflowImageClassifier {
             String digitModelFilename,
             int digitInputSize,
             int digitNumClasses,
+            String[] boxInputNames,
             String digitInputName,
+            String boxOutputName,
             String digitOutputName)
             throws IOException {
         TensorflowImageClassifier c = new TensorflowImageClassifier();
+        c.boxInputNames = boxInputNames;
         c.digitInputName = digitInputName;
+        c.boxOutputNames = new String[]{boxOutputName};
         c.digitOutputNames = new String[]{digitOutputName};
 
         c.mapInferenceInterface = new TensorFlowInferenceInterface(assetManager, mapModelFilename);
@@ -43,19 +49,19 @@ class TensorflowImageClassifier {
 
         // Copy the input data into TensorFlow.
         TraceCompat.beginSection("feed");
-        mapInferenceInterface.feed("input_image", pixels, new long[]{width * height * 3});
-        mapInferenceInterface.feed("width", new int[]{width}, new long[]{1});
-        mapInferenceInterface.feed("height", new int[]{height}, new long[]{1});
+        mapInferenceInterface.feed(boxInputNames[0], pixels, new long[]{width * height * 3});
+        mapInferenceInterface.feed(boxInputNames[1], new int[]{width}, new long[]{1});
+        mapInferenceInterface.feed(boxInputNames[2], new int[]{height}, new long[]{1});
         TraceCompat.endSection();
 
         // Run the inference call.
         TraceCompat.beginSection("run");
-        mapInferenceInterface.run(new String[]{"boxes"}, false);
+        mapInferenceInterface.run(boxOutputNames, false);
         TraceCompat.endSection();
 
         // Copy the output Tensor back into the output array.
         TraceCompat.beginSection("fetch");
-        mapInferenceInterface.fetch("boxes", boxes);
+        mapInferenceInterface.fetch(boxOutputNames[0], boxes);
         TraceCompat.endSection();
     }
 

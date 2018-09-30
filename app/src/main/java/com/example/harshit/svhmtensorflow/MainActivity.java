@@ -36,6 +36,9 @@ public class MainActivity extends AppCompatActivity {
     private static final String DIGIT_INPUT_NAME = "image_placeholder";
     private static final String DIGIT_OUTPUT_NAME = "final_logits";
 
+    private static final String[] BOX_INPUT_NAMES = new String[]{"input_image", "width", "height"};
+    private static final String BOX_OUTPUT_NAME = "boxes";
+
     private static final String MAP_MODEL_FILE = "file:///android_asset/map_model_graph.pb";
     private static final String DIGIT_MODEL_FILE = "file:///android_asset/svhn_model_graph.pb";
 
@@ -278,7 +281,9 @@ public class MainActivity extends AppCompatActivity {
                             DIGIT_MODEL_FILE,
                             DIGIT_INPUT_SIZE,
                             DIGIT_NUM_CLASSES,
+                            BOX_INPUT_NAMES,
                             DIGIT_INPUT_NAME,
+                            BOX_OUTPUT_NAME,
                             DIGIT_OUTPUT_NAME);
                 } catch (IOException e) {
                     e.printStackTrace();
