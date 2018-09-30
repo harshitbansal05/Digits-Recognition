@@ -38,7 +38,7 @@ class TensorflowImageClassifier {
         return c;
     }
 
-    void getMaps(final float[] pixels, float[] scoreMap, float[] geometryMap, int width, int height) {
+    void getMaps(final float[] pixels, float[] boxes, int width, int height) {
         TraceCompat.beginSection("getMaps");
 
         // Copy the input data into TensorFlow.
@@ -50,13 +50,12 @@ class TensorflowImageClassifier {
 
         // Run the inference call.
         TraceCompat.beginSection("run");
-        mapInferenceInterface.run(new String[]{"F_score", "F_geometry"}, false);
+        mapInferenceInterface.run(new String[]{"boxes"}, false);
         TraceCompat.endSection();
 
         // Copy the output Tensor back into the output array.
         TraceCompat.beginSection("fetch");
-        mapInferenceInterface.fetch("F_score", scoreMap);
-        mapInferenceInterface.fetch("F_geometry", geometryMap);
+        mapInferenceInterface.fetch("boxes", boxes);
         TraceCompat.endSection();
     }
 
